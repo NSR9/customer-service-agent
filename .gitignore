@@ -1,5 +1,10 @@
 # Environment variables
 .env
+.env.backup
+.env.new
+# Keep templates and examples
+!.env.template
+!.env.example
 
 # Python
 __pycache__/
