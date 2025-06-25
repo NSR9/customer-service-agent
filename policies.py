@@ -26,7 +26,7 @@ SUPPORT_POLICIES = {
     },
     "Wrong Item Resolution": {
         "description": "If a customer receives the wrong item, they can keep the incorrect item and we'll ship the correct one immediately, or they can return the wrong item for a full refund.",
-        "when_to_use": "When a customer receives an item different from what they ordered.",
+        "when_to_use": "When a customer receives an item different from what they ordered.", #Wrong item pickup and right item pickup
         "applicable_problems": ["wrong-item"]
     },
     "Size/Fit Adjustment": {
