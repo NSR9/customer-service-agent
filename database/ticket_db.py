@@ -58,6 +58,7 @@ class TicketState(Base):
     ticket_id = Column(Integer, ForeignKey("tickets.id"))
     
     # State data from SupportAgentState
+    messages = Column(JSON, nullable=True)  # Added back now that the column exists in DB
     problems = Column(JSON)  # List of problem types
     policy_name = Column(String, nullable=True)
     policy_desc = Column(Text, nullable=True)
@@ -79,6 +80,7 @@ class TicketState(Base):
             "policy_desc": self.policy_desc,
             "policy_reason": self.policy_reason,
             "action_taken": self.action_taken,
+            "messages": self.messages,
             "reason": self.reason,
             "reasoning": self.reasoning,
             "thought_process": self.thought_process
@@ -152,8 +154,8 @@ def save_ticket_state(ticket_data, state_data, db):
             # policy_reason = state_data.get('preason')
             reasoning = state_data.get('reasoning', {})
             thought_process = state_data.get('thought_process', [])
-            messages = state_data.get('messages', [])
             reason = None
+            messages = state_data.get('messages', [])
             
             # Try to extract reason from messages
             if messages and isinstance(messages, list):
@@ -161,6 +163,23 @@ def save_ticket_state(ticket_data, state_data, db):
                     if hasattr(msg, 'content') and msg.content and '✅' in msg.content:
                         reason = msg.content
                         break
+                
+            # Convert message objects to serializable format
+            serialized_messages = []
+            if messages:
+                for msg in messages:
+                    if hasattr(msg, 'to_dict'):
+                        serialized_messages.append(msg.to_dict())
+                    elif hasattr(msg, 'content') and hasattr(msg, 'type'):
+                        serialized_messages.append({
+                            'content': msg.content,
+                            'type': msg.type
+                        })
+                    elif isinstance(msg, dict):
+                        serialized_messages.append(msg)
+            
+            # Use serialized messages
+            messages = serialized_messages
         else:
             # Handle SupportAgentState object with attributes
             print(f"\n\nstate_data has attributes\n\n")
@@ -172,10 +191,35 @@ def save_ticket_state(ticket_data, state_data, db):
             reason = getattr(state_data, 'reason', None) if hasattr(state_data, 'reason') else None
             reasoning = getattr(state_data, 'reasoning', {}) if hasattr(state_data, 'reasoning') else {}
             thought_process = getattr(state_data, 'thought_process', []) if hasattr(state_data, 'thought_process') else []
+            
+            # Try to extract reason from messages if not already set
+            messages = []
+            if hasattr(state_data, 'messages'):
+                raw_messages = getattr(state_data, 'messages', [])
+                
+                # Convert message objects to serializable format
+                for msg in raw_messages:
+                    if hasattr(msg, 'to_dict'):
+                        messages.append(msg.to_dict())
+                    elif hasattr(msg, 'content') and hasattr(msg, 'type'):
+                        messages.append({
+                            'content': msg.content,
+                            'type': msg.type
+                        })
+                    elif isinstance(msg, dict):
+                        messages.append(msg)
+                
+                # Try to extract reason if not already set
+                if not reason and raw_messages and isinstance(raw_messages, list):
+                    for msg in reversed(raw_messages):  # Look from the end
+                        if hasattr(msg, 'content') and msg.content and '✅' in msg.content:
+                            reason = msg.content
+                            break
         
         if existing_state:
             # Update existing state
             print(f"Updating existing state: {existing_state}")
+            existing_state.messages = messages
             existing_state.problems = problems
             existing_state.policy_name = policy_name
             existing_state.policy_desc = policy_desc
@@ -187,21 +231,28 @@ def save_ticket_state(ticket_data, state_data, db):
         else:
             # Create new ticket state
             print(f"\n\nnot updating and Creating new ticket state: {ticket.to_dict()}\n\n")
-            ticket_state = TicketState(
-                ticket_id=ticket.id,
-                problems=problems,
-                policy_name=policy_name,
-                policy_desc=policy_desc,
-                # policy_reason=policy_reason,
-                action_taken=action_taken,
-                # reason=reason,
-                reasoning=reasoning,
-                thought_process=json.loads(json.dumps(thought_process, default=str))  # Handle serialization
-            )
-            print(f"Ticket state created in save_ticket_state: {ticket_state.to_dict()}")
+            try:
+                ticket_state = TicketState(
+                    ticket_id=ticket.id,
+                    messages=messages,
+                    problems=problems,
+                    policy_name=policy_name,
+                    policy_desc=policy_desc,
+                    # policy_reason=policy_reason,
+                    action_taken=action_taken,
+                    # reason=reason,
+                    reasoning=reasoning,
+                    thought_process=json.loads(json.dumps(thought_process, default=str))  # Handle serialization
+                )
+                print(f"Ticket state created in save_ticket_state: {ticket_state.to_dict()}")
 
-            db.add(ticket_state)
-            print(f"Ticket state added to database: {ticket_state}")
+                db.add(ticket_state)
+                print(f"Ticket state added to database: {ticket_state}")
+            except Exception as e:
+                print(f"Error creating ticket state: {str(e)}")
+                # Continue with the transaction but log the error
+                db.rollback()
+                raise e
             
         db.commit()
         print(f"Successfully saved/updated ticket {ticket_data['ticket_id']} in database")

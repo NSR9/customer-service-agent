@@ -68,6 +68,19 @@ def check_stock(product_id: str) -> str:
 
 def initialize_resend(order_id: str) -> str:
     """Initialize a resend for a specific order"""
+    # Check if there are multiple items to resend (comma-separated)
+    if ',' in order_id:
+        # Split by comma and process each item
+        items = order_id.split(',')
+        responses = []
+        
+        for item in items:
+            item = item.strip()  # Remove any whitespace
+            responses.append(initialize_resend(item))  # Process each item individually
+        
+        # Combine all responses
+        return "\n\n".join(responses)
+    
     # Extract product ID from the order_id string if it contains both
     if '/' in order_id:
         order_id, product_id = order_id.split('/')
@@ -96,6 +109,19 @@ def initialize_resend(order_id: str) -> str:
 
 def initialize_refund(order_id: str) -> str:
     """Initialize a refund for a specific order"""
+    # Check if there are multiple items to refund (comma-separated)
+    if ',' in order_id:
+        # Split by comma and process each item
+        items = order_id.split(',')
+        responses = []
+        
+        for item in items:
+            item = item.strip()  # Remove any whitespace
+            responses.append(initialize_refund(item))  # Process each item individually
+        
+        # Combine all responses
+        return "\n\n".join(responses)
+    
     # Extract product ID from the order_id string if it contains both
     if '/' in order_id:
         order_id, product_id = order_id.split('/')

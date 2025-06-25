@@ -51,6 +51,7 @@ class TicketResponse(BaseModel):
     customer_id: Optional[str] = None
     description: Optional[str] = None
     received_date: Optional[datetime] = None
+    messages: Optional[List[Dict[str, Any]]] = None
 
 class TicketDetailResponse(TicketResponse):
     processed_date: Optional[datetime] = None
@@ -76,6 +77,7 @@ def process_ticket_task(ticket_data: Dict[str, Any], db: Session = Depends(get_d
         # Log the completion of the workflow
         print(f"Workflow completed for ticket {ticket_data['ticket_id']}")
         print(f"Final state: {final_state}`")
+        
         # Handle different state object types
         # If final_state is a dict-like object (AddableValuesDict)
         if hasattr(final_state, 'get'):
@@ -83,19 +85,26 @@ def process_ticket_task(ticket_data: Dict[str, Any], db: Session = Depends(get_d
             problems = final_state.get('problems', [])
             actions = final_state.get('actions', None)
             action_taken = actions[0] if isinstance(actions, list) and actions else None
+            messages = final_state.get('messages', [])
             print(f"Problems identified: {problems}")
             print(f"Action taken: {action_taken}")
         else:
             # Try to access attributes directly if it's an object with attributes
             problems = getattr(final_state, 'problems', []) if hasattr(final_state, 'problems') else []
             action_taken = getattr(final_state, 'action_taken', None) if hasattr(final_state, 'action_taken') else None
+            messages = getattr(final_state, 'messages', []) if hasattr(final_state, 'messages') else []
             print(f"Problems identified: {problems}")
             print(f"Action taken: {action_taken}")
         
         # Save ticket and state to database
         print(f"Saving ticket and state to database: {ticket_data}, {final_state}")
-        save_ticket_state(ticket_data, final_state, db)
+        try:
+            save_ticket_state(ticket_data, final_state, db)
+        except Exception as e:
+            print(f"Error saving ticket state: {str(e)}")
+            # Continue execution even if saving to DB fails
         
+        # Return the final state
         return final_state
     except Exception as e:
         print(f"Error processing ticket {ticket_data['ticket_id']}: {str(e)}")
@@ -176,51 +185,75 @@ async def get_ticket(ticket_id: str, db: Session = Depends(get_db)):
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     
-    # Get the ticket state
-    ticket_state = db.query(TicketState).filter(TicketState.ticket_id == ticket.id).first()
-    
-    if not ticket_state:
+    try:
+        # Use a specific query that only selects columns that exist in the database
+        ticket_state = db.query(
+            TicketState.problems,
+            TicketState.policy_name,
+            TicketState.policy_desc,
+            TicketState.action_taken,
+            TicketState.reason,
+            TicketState.reasoning,
+            TicketState.thought_process,
+            TicketState.messages
+        ).filter(TicketState.ticket_id == ticket.id).first()
+        
+        if not ticket_state:
+            return {
+                "ticket_id": ticket.ticket_id,
+                "status": ticket.status,
+                "message": "Ticket found but processing not complete",
+                "customer_id": ticket.customer_id,
+                "description": ticket.description,
+                "received_date": ticket.received_date,
+                "processed_date": ticket.processed_date,
+                "messages": []  # Include empty messages array
+            }
+        
+        # Return full ticket details with state
+        response = {
+            "ticket_id": ticket.ticket_id,
+            "status": ticket.status,
+            "message": "Ticket processing complete",
+            "customer_id": ticket.customer_id,
+            "description": ticket.description,
+            "received_date": ticket.received_date,
+            "processed_date": ticket.processed_date,
+            "problems": ticket_state.problems,
+            "policy_name": ticket_state.policy_name,
+            "policy_desc": ticket_state.policy_desc,
+            "action_taken": ticket_state.action_taken,
+            "reason": ticket_state.reason,
+            "reasoning": ticket_state.reasoning,
+            "thought_process": ticket_state.thought_process,
+            "messages": ticket_state.messages if ticket_state.messages else []
+        }
+        return response
+    except Exception as e:
+        print(f"Error accessing ticket state data: {str(e)}")
+        db.rollback()  # Roll back the transaction to avoid cascading errors
+        
+        # Return basic ticket info without state data
         return {
             "ticket_id": ticket.ticket_id,
             "status": ticket.status,
-            "message": "Ticket found but processing not complete",
+            "message": f"Error retrieving ticket state: {str(e)}",
             "customer_id": ticket.customer_id,
-            "description": ticket.description ,
+            "description": ticket.description,
             "received_date": ticket.received_date,
-            "processed_date": ticket.processed_date
+            "processed_date": ticket.processed_date,
+            "messages": []  # Include empty messages array
         }
-    
-    # Return full ticket details with state
-    return {
-        "ticket_id": ticket.ticket_id,
-        "status": ticket.status,
-        "message": "Ticket processing complete",
-        "customer_id": ticket.customer_id,
-        "description": ticket.description,
-        "received_date": ticket.received_date,
-        "processed_date": ticket.processed_date,
-        "problems": ticket_state.problems,
-        "policy_name": ticket_state.policy_name,
-        "policy_desc": ticket_state.policy_desc,
-        "action_taken": ticket_state.action_taken,
-        "reason": ticket_state.reason,
-        "reasoning": ticket_state.reasoning,
-        "thought_process": ticket_state.thought_process
-    }
 
 @app.get("/tickets", response_model=List[TicketResponse])
 async def list_tickets(db: Session = Depends(get_db)):
     """
     List all tickets
     """
-    # tickets = db.query(Ticket).all()
-    # tickets = db.query(Ticket).options(joinedload(Ticket.state_data)).all()
     tickets = db.query(Ticket).all()
     
     result = []
     for ticket in tickets:
-        # ticket_state = db.query(TicketState).filter(TicketState.ticket_id == ticket.id).first()
-        # print(ticket.customer_id)
         ticket_data = {
             "ticket_id": ticket.ticket_id,
             "status": ticket.status,
@@ -229,12 +262,27 @@ async def list_tickets(db: Session = Depends(get_db)):
             "customer_id": ticket.customer_id
         }
         
-        if ticket.state_data:
-            ticket_data.update({
-                "problems": ticket.state_data.problems,
-                "policy_name": ticket.state_data.policy_name,
-                "action_taken": ticket.state_data.action_taken
-            })
+        try:
+            # Use a specific query that only selects columns that exist in the database
+            ticket_state = db.query(
+                TicketState.problems,
+                TicketState.policy_name,
+                TicketState.action_taken,
+                TicketState.messages
+            ).filter(TicketState.ticket_id == ticket.id).first()
+            
+            if ticket_state:
+                ticket_data.update({
+                    "problems": ticket_state.problems,
+                    "policy_name": ticket_state.policy_name,
+                    "action_taken": ticket_state.action_taken,
+                    "messages": ticket_state.messages if ticket_state.messages else []
+                })
+        except Exception as e:
+            print(f"Error accessing ticket state data: {str(e)}")
+            # Continue without state data
+            db.rollback()  # Roll back the transaction to avoid cascading errors
+            ticket_data["messages"] = []  # Ensure messages field is present even on error
         
         result.append(ticket_data)
     
