@@ -97,7 +97,7 @@ def get_db():
         db.close()
 
 # Save ticket and state to database
-def save_ticket_state(ticket_data, state_data):
+def save_ticket_state(ticket_data, state_data, db):
     """
     Save ticket and its state to the database
     
@@ -108,17 +108,20 @@ def save_ticket_state(ticket_data, state_data):
     Returns:
         Ticket object
     """
-    db = SessionLocal()
+    
+    print(f"Saving ticket and state to database: {db}")
     try:
         # Check if ticket already exists
         existing_ticket = db.query(Ticket).filter(Ticket.ticket_id == ticket_data["ticket_id"]).first()
         
         if existing_ticket:
+            print(f"Ticket already exists: {existing_ticket}")
             # Update existing ticket
             ticket = existing_ticket
             ticket.processed_date = datetime.now()
             ticket.status = "resolved"
         else:
+            print(f"Creating new ticket: {ticket_data}")
             # Create new ticket
             ticket = Ticket(
                 ticket_id=ticket_data["ticket_id"],
@@ -134,17 +137,19 @@ def save_ticket_state(ticket_data, state_data):
         
         # Check if state already exists for this ticket
         existing_state = db.query(TicketState).filter(TicketState.ticket_id == ticket.id).first()
-        
+        print(f"Existing state: {existing_state}")
         # Extract state data based on the object type
         # Handle AddableValuesDict (dict-like object)
+        print(f"\n\nstate_data: {state_data}\n\n")
+
         if hasattr(state_data, 'get'):
+            print(f"\n\nstate_data has get\n\n")
             problems = state_data.get('problems', [])
             actions = state_data.get('actions', [])
             action_taken = actions[0] if isinstance(actions, list) and actions else None
-            policy = state_data.get('policy', {})
-            policy_name = policy.get('name') if isinstance(policy, dict) else None
-            policy_desc = policy.get('description') if isinstance(policy, dict) else None
-            policy_reason = policy.get('reason') if isinstance(policy, dict) else None
+            policy_name = state_data.get('policy_name') 
+            policy_desc = state_data.get('policy_desc') 
+            # policy_reason = state_data.get('preason')
             reasoning = state_data.get('reasoning', {})
             thought_process = state_data.get('thought_process', [])
             messages = state_data.get('messages', [])
@@ -158,6 +163,7 @@ def save_ticket_state(ticket_data, state_data):
                         break
         else:
             # Handle SupportAgentState object with attributes
+            print(f"\n\nstate_data has attributes\n\n")
             problems = getattr(state_data, 'problems', []) if hasattr(state_data, 'problems') else []
             policy_name = getattr(state_data, 'policy_name', None) if hasattr(state_data, 'policy_name') else None
             policy_desc = getattr(state_data, 'policy_desc', None) if hasattr(state_data, 'policy_desc') else None
@@ -169,28 +175,33 @@ def save_ticket_state(ticket_data, state_data):
         
         if existing_state:
             # Update existing state
+            print(f"Updating existing state: {existing_state}")
             existing_state.problems = problems
             existing_state.policy_name = policy_name
             existing_state.policy_desc = policy_desc
-            existing_state.policy_reason = policy_reason
+            # existing_state.policy_reason = policy_reason
             existing_state.action_taken = action_taken
             existing_state.reason = reason
             existing_state.reasoning = reasoning
             existing_state.thought_process = json.loads(json.dumps(thought_process, default=str))
         else:
             # Create new ticket state
+            print(f"\n\nnot updating and Creating new ticket state: {ticket.to_dict()}\n\n")
             ticket_state = TicketState(
                 ticket_id=ticket.id,
                 problems=problems,
                 policy_name=policy_name,
                 policy_desc=policy_desc,
-                policy_reason=policy_reason,
+                # policy_reason=policy_reason,
                 action_taken=action_taken,
-                reason=reason,
+                # reason=reason,
                 reasoning=reasoning,
                 thought_process=json.loads(json.dumps(thought_process, default=str))  # Handle serialization
             )
+            print(f"Ticket state created in save_ticket_state: {ticket_state.to_dict()}")
+
             db.add(ticket_state)
+            print(f"Ticket state added to database: {ticket_state}")
             
         db.commit()
         print(f"Successfully saved/updated ticket {ticket_data['ticket_id']} in database")

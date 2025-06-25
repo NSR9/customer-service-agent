@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 import uvicorn
 import uuid
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 # Import graph components
 from graph import graph_app
@@ -48,11 +48,11 @@ class TicketResponse(BaseModel):
     problems: Optional[List[str]] = None
     policy_name: Optional[str] = None
     action_taken: Optional[str] = None
+    customer_id: Optional[str] = None
+    description: Optional[str] = None
+    received_date: Optional[datetime] = None
 
 class TicketDetailResponse(TicketResponse):
-    customer_id: str
-    description: str
-    received_date: datetime
     processed_date: Optional[datetime] = None
     policy_desc: Optional[str] = None
     reason: Optional[str] = None
@@ -60,7 +60,7 @@ class TicketDetailResponse(TicketResponse):
     thought_process: Optional[List[Dict[str, Any]]] = None
 
 # Process ticket in background
-def process_ticket_task(ticket_data: Dict[str, Any]):
+def process_ticket_task(ticket_data: Dict[str, Any], db: Session = Depends(get_db)):
     """
     Process a ticket using the LangGraph workflow and save results to database
     """
@@ -75,7 +75,7 @@ def process_ticket_task(ticket_data: Dict[str, Any]):
         
         # Log the completion of the workflow
         print(f"Workflow completed for ticket {ticket_data['ticket_id']}")
-        
+        print(f"Final state: {final_state}`")
         # Handle different state object types
         # If final_state is a dict-like object (AddableValuesDict)
         if hasattr(final_state, 'get'):
@@ -93,7 +93,8 @@ def process_ticket_task(ticket_data: Dict[str, Any]):
             print(f"Action taken: {action_taken}")
         
         # Save ticket and state to database
-        save_ticket_state(ticket_data, final_state)
+        print(f"Saving ticket and state to database: {ticket_data}, {final_state}")
+        save_ticket_state(ticket_data, final_state, db)
         
         return final_state
     except Exception as e:
@@ -101,7 +102,7 @@ def process_ticket_task(ticket_data: Dict[str, Any]):
         # Re-raise the exception to be handled by the caller
         raise e
 
-@app.post("/tickets/", response_model=TicketResponse)
+@app.post("/tickets", response_model=TicketResponse)
 async def create_ticket(
     ticket: TicketRequest,
     background_tasks: BackgroundTasks,
@@ -110,6 +111,13 @@ async def create_ticket(
     """
     Create a new support ticket and process it asynchronously
     """
+    # Debug logging
+    print("\n=== RECEIVED TICKET REQUEST ===")
+    print(f"ticket_id: {ticket.ticket_id}")
+    print(f"ticket_description: {ticket.ticket_description[:50]}...")
+    print(f"customer_id: {ticket.customer_id}")
+    print(f"received_date: {ticket.received_date}")
+    print("===============================\n")
     try:
         # Check if ticket already exists
         existing_ticket = db.query(Ticket).filter(Ticket.ticket_id == ticket.ticket_id).first()
@@ -130,6 +138,7 @@ async def create_ticket(
         )
         db.add(new_ticket)
         db.commit()
+        print(f"New ticket created: {new_ticket}")
         
         # Prepare ticket data for background processing
         ticket_data = {
@@ -141,7 +150,7 @@ async def create_ticket(
         }
         
         # Add ticket processing to background tasks
-        background_tasks.add_task(process_ticket_task, ticket_data)
+        background_tasks.add_task(process_ticket_task, ticket_data, db)
         
         return {
             "ticket_id": ticket.ticket_id,
@@ -176,7 +185,7 @@ async def get_ticket(ticket_id: str, db: Session = Depends(get_db)):
             "status": ticket.status,
             "message": "Ticket found but processing not complete",
             "customer_id": ticket.customer_id,
-            "description": ticket.description,
+            "description": ticket.description ,
             "received_date": ticket.received_date,
             "processed_date": ticket.processed_date
         }
@@ -199,29 +208,32 @@ async def get_ticket(ticket_id: str, db: Session = Depends(get_db)):
         "thought_process": ticket_state.thought_process
     }
 
-@app.get("/tickets/", response_model=List[TicketResponse])
+@app.get("/tickets", response_model=List[TicketResponse])
 async def list_tickets(db: Session = Depends(get_db)):
     """
     List all tickets
     """
+    # tickets = db.query(Ticket).all()
+    # tickets = db.query(Ticket).options(joinedload(Ticket.state_data)).all()
     tickets = db.query(Ticket).all()
     
     result = []
     for ticket in tickets:
-        ticket_state = db.query(TicketState).filter(TicketState.ticket_id == ticket.id).first()
-        
+        # ticket_state = db.query(TicketState).filter(TicketState.ticket_id == ticket.id).first()
+        # print(ticket.customer_id)
         ticket_data = {
             "ticket_id": ticket.ticket_id,
             "status": ticket.status,
             "message": "Ticket found",
+            "description": ticket.description,
             "customer_id": ticket.customer_id
         }
         
-        if ticket_state:
+        if ticket.state_data:
             ticket_data.update({
-                "problems": ticket_state.problems,
-                "policy_name": ticket_state.policy_name,
-                "action_taken": ticket_state.action_taken
+                "problems": ticket.state_data.problems,
+                "policy_name": ticket.state_data.policy_name,
+                "action_taken": ticket.state_data.action_taken
             })
         
         result.append(ticket_data)
