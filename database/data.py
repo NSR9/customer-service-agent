@@ -61,6 +61,15 @@ PRODUCTS = {
         weight=0.1,
         dimensions={"length": 10, "width": 10, "height": 1}
     ),
+    "P1006": Product(
+        id="P1006",
+        name="Premium Cotton Hoodie",
+        description="Comfortable cotton hoodie with front pocket and adjustable hood",
+        price=49.99,
+        category=ProductCategory.CLOTHING,
+        weight=0.4,
+        dimensions={"length": 30, "width": 25, "height": 3}
+    ),
 }
 
 # Sample Inventory
@@ -110,6 +119,15 @@ INVENTORY = {
         reorder_threshold=10,
         reorder_quantity=30
     ),
+    "P1006": InventoryItem(
+        product_id="P1006",
+        quantity=0,  # Out of stock for Scenario 3
+        warehouse_id="W002",
+        location="D15-E7",
+        last_restock_date=NOW - timedelta(days=45),
+        reorder_threshold=10,
+        reorder_quantity=30
+    ),
 }
 
 # Sample Customers
@@ -150,6 +168,19 @@ CUSTOMERS = {
             "city": "Portland",
             "state": "OR",
             "zip": "97201",
+            "country": "USA"
+        }
+    ),
+    "C1004": Customer(
+        id="C1004",
+        name="Sarah Wilson",
+        email="sarah.wilson@example.com",
+        phone="555-789-1234",
+        address={
+            "street": "321 Maple Dr",
+            "city": "Boston",
+            "state": "MA",
+            "zip": "02108",
             "country": "USA"
         }
     ),
@@ -223,6 +254,60 @@ def generate_tracking_history(days_ago_shipped: int, status: ShipmentStatus) -> 
     
     return history
 
+# Generate tracking history with two failed delivery attempts for Scenario 1 Case B
+def generate_failed_delivery_history() -> List[TrackingEvent]:
+    history = []
+    
+    # Processing at warehouse
+    start_date = NOW - timedelta(days=5)
+    history.append(TrackingEvent(
+        timestamp=start_date,
+        location="Warehouse #1, Springfield, IL",
+        status=ShipmentStatus.PROCESSING,
+        description="Package processed at shipping facility"
+    ))
+    
+    # In transit
+    history.append(TrackingEvent(
+        timestamp=start_date + timedelta(hours=12),
+        location="Springfield Distribution Center, IL",
+        status=ShipmentStatus.IN_TRANSIT,
+        description="Package in transit to next facility"
+    ))
+    
+    # More transit events
+    history.append(TrackingEvent(
+        timestamp=start_date + timedelta(days=1),
+        location="Chicago Sorting Center, IL",
+        status=ShipmentStatus.IN_TRANSIT,
+        description="Package arrived at sorting facility"
+    ))
+    
+    history.append(TrackingEvent(
+        timestamp=start_date + timedelta(days=2),
+        location="Regional Distribution Center",
+        status=ShipmentStatus.IN_TRANSIT,
+        description="Package in transit to destination"
+    ))
+    
+    # First failed delivery attempt
+    history.append(TrackingEvent(
+        timestamp=start_date + timedelta(days=3),
+        location="Destination",
+        status=ShipmentStatus.FAILED,
+        description="Delivery attempt failed: No one available to receive package"
+    ))
+    
+    # Second failed delivery attempt
+    history.append(TrackingEvent(
+        timestamp=start_date + timedelta(days=4),
+        location="Destination",
+        status=ShipmentStatus.FAILED,
+        description="Delivery attempt failed: No one available to receive package. Package will be returned to sender."
+    ))
+    
+    return history
+
 # Sample Shipments
 SHIPMENTS = {
     "SH1001": Shipment(
@@ -266,6 +351,47 @@ SHIPMENTS = {
         estimated_delivery=NOW,
         tracking_history=generate_tracking_history(3, ShipmentStatus.OUT_FOR_DELIVERY),
         created_at=NOW - timedelta(days=4)
+    ),
+    "SH1005": Shipment(
+        id="SH1005",
+        order_id="ORD98765",
+        carrier="FedEx",
+        tracking_number="FDX987654321",
+        status=ShipmentStatus.IN_TRANSIT,
+        estimated_delivery=NOW + timedelta(days=2),  # ETA June 28 for Scenario 1 Case A
+        tracking_history=generate_tracking_history(3, ShipmentStatus.IN_TRANSIT),
+        created_at=NOW - timedelta(days=4)
+    ),
+    "SH1006": Shipment(
+        id="SH1006",
+        order_id="ORD87654",
+        carrier="UPS",
+        tracking_number="UPS567891234",
+        status=ShipmentStatus.FAILED,
+        estimated_delivery=NOW - timedelta(days=2),
+        tracking_history=generate_failed_delivery_history(),
+        created_at=NOW - timedelta(days=5)
+    ),
+    "SH1007": Shipment(
+        id="SH1007",
+        order_id="ORD76543",
+        carrier="USPS",
+        tracking_number="USPS987654321",
+        status=ShipmentStatus.IN_TRANSIT,
+        estimated_delivery=NOW + timedelta(days=1),  # ETA June 27 for Scenario 2
+        tracking_history=generate_tracking_history(2, ShipmentStatus.IN_TRANSIT),
+        created_at=NOW - timedelta(days=3)
+    ),
+    "SH1008": Shipment(
+        id="SH1008",
+        order_id="ORD24680",
+        carrier="UPS",
+        tracking_number="UPS135792468",
+        status=ShipmentStatus.DELIVERED,
+        estimated_delivery=NOW - timedelta(days=3),
+        actual_delivery=NOW - timedelta(days=3),
+        tracking_history=generate_tracking_history(6, ShipmentStatus.DELIVERED),
+        created_at=NOW - timedelta(days=7)
     ),
 }
 
@@ -364,6 +490,86 @@ ORDERS = {
         payment_method="Credit Card",
         shipment_id="SH1004",
         created_at=NOW - timedelta(days=4)
+    ),
+    "ORD98765": Order(
+        id="ORD98765",
+        customer_id="C1001",
+        status=OrderStatus.SHIPPED,
+        items=[
+            OrderItem(
+                product_id="P1001",
+                quantity=1,
+                unit_price=PRODUCTS["P1001"].price,
+                total_price=PRODUCTS["P1001"].price,
+                is_returned=False
+            )
+        ],
+        total_amount=PRODUCTS["P1001"].price,
+        shipping_address=CUSTOMERS["C1001"].address,
+        billing_address=CUSTOMERS["C1001"].address,
+        payment_method="Credit Card",
+        shipment_id="SH1005",
+        created_at=NOW - timedelta(days=4)
+    ),
+    "ORD87654": Order(
+        id="ORD87654",
+        customer_id="C1002",
+        status=OrderStatus.SHIPPED,
+        items=[
+            OrderItem(
+                product_id="P1004",
+                quantity=1,
+                unit_price=PRODUCTS["P1004"].price,
+                total_price=PRODUCTS["P1004"].price,
+                is_returned=False
+            )
+        ],
+        total_amount=PRODUCTS["P1004"].price,
+        shipping_address=CUSTOMERS["C1002"].address,
+        billing_address=CUSTOMERS["C1002"].address,
+        payment_method="PayPal",
+        shipment_id="SH1006",
+        created_at=NOW - timedelta(days=5)
+    ),
+    "ORD76543": Order(
+        id="ORD76543",
+        customer_id="C1003",
+        status=OrderStatus.SHIPPED,
+        items=[
+            OrderItem(
+                product_id="P1002",
+                quantity=1,
+                unit_price=PRODUCTS["P1002"].price,
+                total_price=PRODUCTS["P1002"].price,
+                is_returned=False
+            )
+        ],
+        total_amount=PRODUCTS["P1002"].price,
+        shipping_address=CUSTOMERS["C1003"].address,
+        billing_address=CUSTOMERS["C1003"].address,
+        payment_method="Credit Card",
+        shipment_id="SH1007",
+        created_at=NOW - timedelta(days=3)
+    ),
+    "ORD24680": Order(
+        id="ORD24680",
+        customer_id="C1004",
+        status=OrderStatus.DELIVERED,
+        items=[
+            OrderItem(
+                product_id="P1006",
+                quantity=1,
+                unit_price=PRODUCTS["P1006"].price,
+                total_price=PRODUCTS["P1006"].price,
+                is_returned=False
+            )
+        ],
+        total_amount=PRODUCTS["P1006"].price,
+        shipping_address=CUSTOMERS["C1004"].address,
+        billing_address=CUSTOMERS["C1004"].address,
+        payment_method="Credit Card",
+        shipment_id="SH1008",
+        created_at=NOW - timedelta(days=7)
     ),
 }
 

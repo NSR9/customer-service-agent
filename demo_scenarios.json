@@ -1,0 +1,48 @@
+{
+  "scenarios": [
+    {
+      "id": "scenario_1a",
+      "name": "Missing Item - Order Still in Transit",
+      "description": "Customer inquires about an order that hasn't arrived yet, but it's still in transit.",
+      "customer_message": "My order #ORD98765 hasn't arrived. Can you check what's happening?",
+      "expected_workflow": {
+        "classification": "non-delivery",
+        "tool_calls": ["track_order(ORD98765)"],
+        "expected_response": "Your order is currently in transit and is expected to arrive by June 28."
+      }
+    },
+    {
+      "id": "scenario_1b",
+      "name": "Missing Item - Delivery Failed Twice",
+      "description": "Customer inquires about an order where delivery was attempted twice but failed.",
+      "customer_message": "Hi, I didn't get my order #ORD87654 even after two delivery attempts. What now?",
+      "expected_workflow": {
+        "classification": "non-delivery",
+        "tool_calls": ["track_order(ORD87654)"],
+        "expected_response": "It looks like delivery was attempted twice but failed. Would you prefer we resend the item or issue a refund?"
+      }
+    },
+    {
+      "id": "scenario_2",
+      "name": "WISMO (Where Is My Order)",
+      "description": "Customer is simply asking for an update on their order's ETA.",
+      "customer_message": "When will my Smart Fitness Watch from order #ORD76543 arrive?",
+      "expected_workflow": {
+        "classification": "wismo",
+        "tool_calls": ["track_order(ORD76543)"],
+        "expected_response": "Your order is on track and is expected to arrive by June 27."
+      }
+    },
+    {
+      "id": "scenario_3",
+      "name": "Damaged Item - Out of Stock",
+      "description": "Customer received a damaged product but it's out of stock for replacement.",
+      "customer_message": "The hoodie in my order #ORD24680 was torn when I received it. I'd like a replacement.",
+      "expected_workflow": {
+        "classification": "damaged",
+        "tool_calls": ["check_stock(P1006)", "initialize_refund(ORD24680)"],
+        "expected_response": "We're sorry about the damaged item. Since the hoodie is out of stock, we've initiated a full refund."
+      }
+    }
+  ]
+} 
