@@ -219,6 +219,7 @@ def resolve_issue(state: SupportAgentState):
     - P1003: Organic Cotton T-Shirt ($29.99)
     - P1004: Stainless Steel Water Bottle ($34.99)
     - P1005: Wireless Charging Pad ($39.99)
+    - P1006: Premium Cotton Hoodie ($49.99)
     """
     
     task = (
@@ -244,6 +245,7 @@ def resolve_issue(state: SupportAgentState):
         f"   - If correct item is out of stock, initiate a refund using initialize_refund\n"
         f"5. For any other issues: Apply the relevant policy\n\n"
         f"Use the available tools to investigate and resolve this issue. Explain your reasoning step by step."
+        f"always reply in the same language as the customer's message"
     )
     
     result = agent.run(task)

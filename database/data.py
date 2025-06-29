@@ -184,6 +184,32 @@ CUSTOMERS = {
             "country": "USA"
         }
     ),
+    "C1005": Customer(
+        id="C1005",
+        name="David Lee",
+        email="david.lee@example.com",
+        phone="555-111-2222",
+        address={
+            "street": "555 Elm St", 
+            "city": "San Francisco",
+            "state": "CA",
+            "zip": "94101",
+            "country": "USA"
+        }
+    ),
+    "C1006": Customer(
+        id="C1006",
+        name="David Gomes",
+        email="david.g@example.com",
+        phone="555-111-2112",
+        address={
+            "street": "111 Elma St",     
+            "city": "Phoenix",
+            "state": "AZ",
+            "zip": "85287",
+            "country": "USA"
+        }
+    ),
 }
 
 # Generate tracking history for a shipment
@@ -571,6 +597,47 @@ ORDERS = {
         shipment_id="SH1008",
         created_at=NOW - timedelta(days=7)
     ),
+    "ORD12346": Order(
+        id="ORD12346",
+        customer_id="C1001",
+        status=OrderStatus.SHIPPED,
+        items=[
+            OrderItem(
+                product_id="P1001",
+                quantity=1,
+                unit_price=PRODUCTS["P1001"].price,
+                total_price=PRODUCTS["P1001"].price,
+                is_returned=False
+            )
+        ],
+        total_amount=PRODUCTS["P1001"].price,
+        shipping_address=CUSTOMERS["C1001"].address,
+        billing_address=CUSTOMERS["C1001"].address,
+        payment_method="Credit Card",
+        shipment_id="SH1009",
+        created_at=NOW - timedelta(days=8)
+    ),
+    "ORD12347": Order(
+        id="ORD12347",
+        customer_id="C1001",
+        status=OrderStatus.SHIPPED,
+        items=[
+            OrderItem(
+                product_id="P1001",
+                quantity=1,
+                unit_price=PRODUCTS["P1001"].price,
+                total_price=PRODUCTS["P1001"].price,
+                is_returned=False
+            )
+        ],
+        total_amount=PRODUCTS["P1001"].price,
+        shipping_address=CUSTOMERS["C1001"].address,
+        billing_address=CUSTOMERS["C1001"].address,
+        payment_method="Credit Card",
+        shipment_id="SH1010",
+        created_at=NOW - timedelta(days=9)  
+    ),
+    
 }
 
 # Sample Return Requests
